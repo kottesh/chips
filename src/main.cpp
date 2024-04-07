@@ -4,9 +4,6 @@
 
 #include "cpu.hpp"
 
-#define FAIL 1
-
-
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " filename" << std::endl;
@@ -17,5 +14,12 @@ int main(int argc, char** argv) {
 
     Chip8* cpu = new Chip8();
     cpu->loadRom(argv[1]);
+    int i = 0;
+    while (i != 10) {
+        cpu->machine();
+        i++;
+    }
+
+    delete cpu;
     return 0;
 }
