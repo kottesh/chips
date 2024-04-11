@@ -1,8 +1,6 @@
 #include <iostream> 
-#include <fstream> // ifstream, ofstream
-#include <cstdint>
 
-#include "cpu.hpp"
+#include "chip8.hpp"
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -13,12 +11,13 @@ int main(int argc, char** argv) {
     std::cout << "Starting CHIPS...." << std::endl;
 
     Chip8* cpu = new Chip8();
-    cpu->loadRom(argv[1]);
-    int i = 0;
-    while (i != 10) {
-        cpu->machine();
-        i++;
+
+    if (!cpu->loadRom(argv[1])) {
+        return 1; // rom load failed
     }
+
+    for (int i = 0; i < 10; i++)
+       cpu->machineCycle();
 
     delete cpu;
     return 0;
