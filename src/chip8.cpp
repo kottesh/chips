@@ -4,6 +4,35 @@
 
 #include "chip8.hpp"
 
+// stack pointer(sp) should be -1 and others to default (0) or empty values.
+Chip8::Chip8(): index(0), sp(-1), pc(0x200), delay_timer(0), sound_timer(0),
+                v{}, mem{}, stack{}, keys{}, graphics{}, redraw(false) {
+    const uint8_t FONT_SIZE = 80;
+    const uint8_t fonts[FONT_SIZE] = {
+        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+        0x20, 0x60, 0x20, 0x20, 0x70, // 1
+        0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+        0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+        0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+        0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+        0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+        0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+        0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+        0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+        0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+        0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+        0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+        0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+        0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+        0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    };
+
+    // load the above fonts from the location 0x050 to 0x09F
+    for (int i=0; i < 80; i++) {
+        mem[0x50 + i] = fonts[i];
+    }
+}
+
 bool Chip8::loadRom(const std::string& rom_file) {
     std::fstream rom(rom_file, std::ios::in | std::ios::binary | std::ios::ate);
 
@@ -46,34 +75,6 @@ bool Chip8::loadRom(const std::string& rom_file) {
     return true;
 }
 
-// stack pointer(sp) should be -1 and others to default (0) or empty values.
-Chip8::Chip8(): index(0), sp(-1), pc(0x200), delay_timer(0), sound_timer(0),
-                v{}, mem{}, stack{}, keys{}, graphics{} {
-    const uint8_t FONT_SIZE = 80;
-    const uint8_t fonts[FONT_SIZE] = {
-        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-        0x20, 0x60, 0x20, 0x20, 0x70, // 1
-        0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-        0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-        0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-        0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-        0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-        0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-        0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-        0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-        0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-        0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-        0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-        0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-        0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-        0xF0, 0x80, 0xF0, 0x80, 0x80  // F
-    };
-
-    // load the above fonts from the location 0x050 to 0x09F
-    for (int i=0; i < 80; i++) {
-        mem[0x50 + i] = fonts[i];
-    }
-}
 
 uint16_t Chip8::pop() {
     // store the top of the stack in data and return the data. 
@@ -232,18 +233,35 @@ void Chip8::machineCycle() {
             // 0xFF(255)
             v[(opcode & 0x0F00) >> 8] = ((rand() % 0xFF) & (opcode & 0x00FF));
             break;
-        case 0xD000: {
-            // TODO: complete the code for displaying the sprites 
-            auto x_pos = v[(opcode & 0x0F00) >> 8];
-            auto y_pos = v[(opcode & 0x00F0) >> 4];
-            auto height = (opcode & 0x000F);
-            
-            v[0xF] = 0;
-            for (int row = 0; row < height; row++) {
-                for (int col = 0; col < 8; col++) {
+        case 0xD000: { // display the sprite at the location Vx, Vy
+            // if the (x, y) gets outside the 64x32 it will get wrapped around.
+            uint8_t x_pos = v[(opcode & 0x0F00) >> 8] % SCREEN_WIDTH;
+            uint8_t y_pos = v[(opcode & 0x00F0) >> 4] % SCREEN_HEIGHT;
+            uint8_t n_bytes = (opcode & 0x000F);
+
+            // dir means direction not directory atleast here.
+            //     col(x_dir)
+            // ------------------
+            // |                |
+            // |                | row(y_dir)
+            // |                |
+            // ------------------
+
+            for (int y_dir = 0; y_dir < n_bytes; y_dir++) {
+                uint8_t sprite_byte = mem[this->index + y_dir];
+                for (int x_dir = 0; x_dir < 8; x_dir++) {
+                    if ((sprite_byte & (0x1 << x_dir)) != 0) {
+                        if (graphics[((y_pos + y_dir) * SCREEN_WIDTH) + x_pos + x_dir] == 1) {
+                            v[0xF] = 1;
+                        } else {
+                            v[0xF] = 0;
+                        }
+                        graphics[((y_pos + y_dir) * SCREEN_WIDTH) + x_pos + x_dir] ^= 1;
+                    }
                 }
-            }           
-            std::cout << "write graphics code" << std::endl;
+            }
+
+            this->redraw = true;
             break;
         }
         case 0xE000:
@@ -325,8 +343,7 @@ void Chip8::machineCycle() {
             invalid = true;
     }
 
-    if (invalid)
-        std::cerr << "Invalid Opcode: " << opcode << std::endl;
+    if (invalid) std::cerr << "Invalid Opcode: " << std::hex << opcode << std::endl;
 
     timers();
 }
