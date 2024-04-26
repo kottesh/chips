@@ -1,7 +1,7 @@
-#include <cstdint>
-
 #ifndef CPU_CHIP_8
 #define CPU_CHIP_8
+
+#include <cstdint>
 
 #define SCREEN_WIDTH 64
 #define SCREEN_HEIGHT 32
@@ -45,7 +45,6 @@ private:
     };
 public:
     Chip8();
-    void reset();
     bool loadRom(const std::string& rom_file); // to load the ROM in the memory.
     void push(const uint16_t data);
     uint16_t pop();

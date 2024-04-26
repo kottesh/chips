@@ -5,19 +5,13 @@
 
 #include "chip8.hpp"
 
-// stack pointer(sp) should be -1 and others to default (0) or empty values.
-Chip8::Chip8(): index(0), sp(-1), pc(START_ADDR), delay_timer(0), sound_timer(0),
-                v{}, stack{}, keys{}, graphics{} {
-    // load the above fonts from the location 0x050 to 0x09F (update comment)
-    std::copy(fonts, fonts + FONT_SIZE, mem + 0x50);
-}
-
-void Chip8::reset() {
+Chip8::Chip8() {
+    // set the default values for the interpreter components.
     std::memset(v, 0, NUM_REGS);
     std::memset(stack, 0, STACK_SIZE);
     std::copy(fonts, fonts + FONT_SIZE, mem + 0x50);
     index = 0;
-    sp = -1;
+    sp = -1; // set the stack pointer to -1 means empty.
     pc = START_ADDR;
     delay_timer = 0;
     sound_timer = 0;
@@ -50,25 +44,16 @@ bool Chip8::loadRom(const std::string& rom_file) {
                                    // first arg - buffer, second arg - no of bytes to read in.
     rom.close();
 
-    //memcpy(mem+0x200,data_buf, FILE_SIZE); // don't forget to include <cstring>
-    for (int i = 0; i < FILE_SIZE; i++) {
-        // the starting address for the programs is 512(0x200)
-        // with that offset, store the rom data.
-        mem[START_ADDR + i] = data_buf[i];
-    }
-
-    // to print the opcodes
-    // for (int i=0x200; i < 0x200+FILE_SIZE; i+=2) {
-    //     uint16_t opcode = (mem[i] << 8) | mem[i+1];
-    //     std::cout << "0x" << std::hex << std::uppercase << opcode << std::endl;
-    // }
+    // starting address for the program is 512kb(0x200)
+    // with that offset, load the rom data.
+    std::copy(data_buf, data_buf + FILE_SIZE, mem+0x200);
 
     delete[] data_buf; 
     return true;
 }
 
 uint16_t Chip8::pop() {
-    return stack[sp--]; // takes the top value, decrement the sp then return. 
+    return stack[sp--]; // takes the top value from stack, decrement the sp then return. 
 }
 
 void Chip8::push(const uint16_t data) {
@@ -99,9 +84,8 @@ bool* Chip8::getGraphics() {
 
 void Chip8::cycle() {
     // (fetch phase)
-    // read the first 8 bits and then increment pc
-    // then again read another 8 bits from the memory
-    // then increment pc once again. So we will have a full 16-bit opcode.
+    // for 16 bit opcode. read 8 bits from the current pc
+    // and another 8 bits from the pc+1
     uint16_t opcode = (mem[pc] << 8) | mem[pc+1];
     pc += 2;
 
@@ -111,11 +95,8 @@ void Chip8::cycle() {
     switch (opcode & 0xF000) {
         case 0x0000:
             switch (opcode & 0x00FF) {
-                case 0x00E0: //clear the display(graphics output)
+                case 0x00E0: //clear the screen 
                     std::memset(graphics, false, SCREEN_WIDTH * SCREEN_HEIGHT);
-                    //for (int i=0; i < 2048; i++) {
-                    //    graphics[i] = 0;
-                    //}
                     break;
                 case 0x00EE: // return from a subroutine
                     pc = pop();
@@ -133,7 +114,7 @@ void Chip8::cycle() {
             pc = opcode & 0x0FFF;
             break;
         case 0x3000: // if Vx == kk then skip the next instruction
-            // for skiping the next instruction increment the pc by 2.
+            // to skip the next instruction increment the pc by 2.
             if (v[(opcode & 0x0F00) >> 8] == (opcode & 0x00FF)) {
                 pc += 2;
             }
@@ -143,7 +124,7 @@ void Chip8::cycle() {
                 pc +=2;
             }
             break;
-        case 0x5000: // skip next ins if Vx = Vy
+        case 0x5000: // skip next instruction if Vx = Vy
             if (v[(opcode & 0x0F00) >> 8] == v[(opcode & 0x00F0) >> 4]) {
                 pc += 2;
             }
@@ -151,21 +132,21 @@ void Chip8::cycle() {
         case 0x6000: // load Vx = kk
             v[(opcode & 0x0F00) >> 8] = (opcode & 0x00FF);
             break;
-        case 0x7000: // add the value the kk from the ins to the Vx register
+        case 0x7000: // add the value kk from the ins to the Vx register
             v[(opcode & 0x0F00) >> 8] += (opcode & 0x00FF);
             break;
         case 0x8000:
             switch (opcode & 0x000F) {
-                case 0x0000: // store the value of Vy to Vx register
+                case 0x0000: // Vx = Vy
                     v[(opcode & 0x0F00) >> 8] = v[(opcode & 0x00F0) >> 4];
                     break;
-                case 0x0001: // perform OR operation on Vx, Vy then store the result in Vx 
+                case 0x0001: // Vx = Vx | Vy
                     v[(opcode & 0x0F00) >> 8] |= v[(opcode & 0x00F0) >> 4];
                     break;
-                case 0x0002: // perform AND operaton on Vx, Vy then store the result in Vx 
+                case 0x0002: // Vx = Vx & Vy
                     v[(opcode & 0x0F00) >> 8] &= v[(opcode & 0x00F0) >> 4];
                     break;
-                case 0x0003: // XOR: Vx = Vx ^ Vy (V? means register)
+                case 0x0003: // XOR: Vx = Vx ^ Vy
                     v[(opcode & 0x0F00) >> 8] ^= v[(opcode & 0x00F0) >> 4];
                     break;
                 case 0x0004: {// ADD: Vx = Vx + Vy, VF = 1 if overflow, otherwise 0
@@ -181,19 +162,14 @@ void Chip8::cycle() {
                 case 0x0005: // subtract Vy from Vx and store the result in Vx, and VF set to 0 when there is a borrow, if not set it to 1.
                     if (v[(opcode & 0x0F00) >> 8] > v[(opcode & 0x00F0) >> 4]) {
                         // flag work opposite to add
-                        v[0xF] = 1; // no underflow 
+                        v[0xF] = 1; // no borrow
                     } else {
-                        v[0xF] = 0; // there is underflow 
+                        v[0xF] = 0; // borrow
                     }
                     v[(opcode & 0x0F00) >> 8] -= v[(opcode & 0x00F0) >> 4];
                     break;
-                case 0x0006: // SHIFT RIGHT: if the lsb of value in the register(Vx) is 1 then set VF = 1, else don't. then shift Vx right by 1-bit
-                    // TODO: replace the below 'if' with single line.
-                    if ((v[(opcode & 0x0F00) >> 8] & 0x1) == 0x1) {
-                        v[0xF] = 1;
-                    } else {
-                        v[0xF] = 0;
-                    }
+                case 0x0006: // SHIFT RIGHT: if the lsb of value in the register(Vx) is 1 then set VF = 1 else 0 
+                    v[0xF] = v[(opcode & 0x0F00) >> 8] & 0x1;
                     v[(opcode & 0x0F00) >> 8] >>= 1;
                     break;
                 case 0x0007: // subtract Vx from Vy and store the result in Vx. if Vy > Vx set VF = 1 otherwise VF = 0
@@ -204,13 +180,8 @@ void Chip8::cycle() {
                     }
                     v[(opcode & 0x0F00) >> 8] = v[(opcode & 0x00F0) >> 4] - v[(opcode & 0x0F00) >> 8];
                     break;
-                case 0x000E: // SHIFT LEFT: if msb of value in the register is 1 then VF = 1 otherwise don't. 
-                    // TODO: replace the below 'if' with single line.
-                    if ((v[(opcode & 0x0F00) >> 8] & 0x1000) == 0x1) {
-                        v[0xF] = 1;
-                    } else {
-                        v[0xF] = 0;
-                    }
+                case 0x000E: // SHIFT LEFT: if msb of value in the register is 1 then VF = 1 otherwise 0.
+                    v[0xF] = (v[(opcode & 0x0F00) >> 8] & 0x80) >> 7;
                     v[(opcode & 0x0F00) >> 8] <<= 1;
                     break;
                 default:
@@ -246,17 +217,6 @@ void Chip8::cycle() {
             // |                |
             // ------------------
 
-            // v[0xF] = 0;
-            // for (int y_dir = 0; y_dir < height ; y_dir++) {
-            //     uint8_t sprite_byte = mem[index + y_dir];
-            //     for (int x_dir = 0; x_dir < 8; x_dir++) {
-            //         if (sprite_byte & (0x1 << x_dir)) {
-            //             if (graphics[((y_pos + y_dir) * SCREEN_WIDTH) + x_pos + x_dir])
-            //                 v[0xF] = 1;
-            //             graphics[((y_pos + y_dir) * SCREEN_WIDTH) + x_pos + x_dir] ^= true;
-            //         }
-            //     }
-            // }
             bool is_flip = false;
             for (int y_dir = 0; y_dir < height; y_dir++) {
                 uint8_t pixels = mem[index + y_dir];
@@ -354,14 +314,15 @@ void Chip8::cycle() {
                 }
                 default:
                     invalid = true;
-                    break;
             }
             break;
         default:
             invalid = true;
     }
 
-    if (invalid) std::cerr << "Invalid Opcode: " << std::hex << opcode << std::endl;
+    if (invalid) {
+        std::cerr << "Invalid Opcode: " << std::hex << opcode << std::endl;
+    }
 
     timers();
 }

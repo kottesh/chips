@@ -2,12 +2,11 @@
 #include <SDL2/SDL.h>
 
 #include "chip8.hpp"
-#include "display.hpp"
+#include "console.hpp"
 
 #define OK 1
 #define FAIL 0
 
-#define SCALE 10
 #define WINDOW_WIDTH 64 * SCALE
 #define WINDOW_HEIGHT 32 * SCALE
 
@@ -26,9 +25,10 @@ int main(int argc, char** argv) {
         std::cout << "rom file loaded." << std::endl;
     }
 
-    console->handleSystem(cpu);
+    console->run(cpu);
 
     delete console;
     delete cpu;
+
     return OK;
 }

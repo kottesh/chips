@@ -5,7 +5,7 @@
 https://github.com/kottesh/chips/assets/67730727/823cc132-7c81-4a62-8ac1-3e5cabb495d1
 
 ## compiling  
-You will need clang++, SDL2 for building from source and probably it should get compiled with below commands.  
+You will need clang++, SDL2, cmake for building from source.
 
 ```bash
 $ git clone https://github.com/kottesh/chips.git
